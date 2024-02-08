@@ -213,3 +213,85 @@ impl IbexParser {
     }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::*;
+    use pretty_assertions::{assert_eq, assert_ne};
+    use std::path::Path;
+
+    #[fixture]
+    fn valid_data() -> Box<&'static Path> {
+        Box::new(Path::new("./tests/data/data_ibex.csv"))
+    }
+
+    #[fixture]
+    fn non_existing_data() -> Box<&'static Path> {
+        Box::new(Path::new("./tests/data/dato_ibex.csv"))
+    }
+
+    #[fixture]
+    fn wrong_data() -> Box<&'static Path> {
+        Box::new(Path::new("./tests/data/wdata_ibex.csv"))
+    }
+
+    // Check that we can parse a file with data.
+    #[rstest]
+    fn test_ibexparser_parse_file(valid_data: Box<&'static Path>) {
+        let parser = IbexParser::new();
+        let path = *valid_data;
+
+        let parsed_data = parser.parse_file(path).unwrap();
+        assert_eq!(parsed_data.len(), N_STOCKS_IN_RAW_FILE);
+        let mut first_parsed: bool = false;
+        for item in parsed_data.iter() {
+            let entry: Vec<&str> = item.split(";").collect();
+            if !first_parsed {
+                // 4 columns selected for the Ibex's entry (see new).
+                assert_eq!(entry.len(), 4);
+                first_parsed = !first_parsed;
+            } else {
+                // 6 columns selected for the stocks's entry (see new).
+                assert_eq!(entry.len(), 6);
+            }
+        }
+    }
+
+    // Check that the parser fails to parse a non existing file.
+    #[rstest]
+    #[should_panic]
+    fn test_ibexparser_parse_nofile(non_existing_data: Box<&'static Path>) {
+        let parser = IbexParser::new();
+        let path = *non_existing_data;
+
+        let _parsed_data = parser.parse_file(path).unwrap();
+    }
+
+    #[rstest]
+    fn test_ibexparser_parse_wrongfile(wrong_data: Box<&'static Path>) {
+        let parser = IbexParser::new();
+        let path = *wrong_data;
+
+        let parsed_data = parser.parse_file(path);
+        assert_eq!(parsed_data, None);
+    }
+
+    #[rstest]
+    fn test_ibexparser_parse_customfile(valid_data: Box<&'static Path>) {
+        let parser = IbexParser::with_custom_values(
+            11, 6, 5,
+            vec![0,1], vec![0,1]
+        );
+        let path = *valid_data;
+
+        let parsed_data = parser.parse_file(path).unwrap();
+        assert_eq!(parsed_data.len(), N_STOCKS_IN_RAW_FILE);
+        for item in parsed_data.iter() {
+            let entry: Vec<&str> = item.split(";").collect();
+            // Only 2 columns where selected at instantiation.
+            assert_eq!(entry.len(), 2);
+        }
+    }
+
+}

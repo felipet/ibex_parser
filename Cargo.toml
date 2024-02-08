@@ -10,3 +10,5 @@ keywords = ["stock", "ibex", "trading"]
 categories = ["finance"]
 
 [dependencies]
+rstest = "0.18.2"
+pretty_assertions = "1.*"

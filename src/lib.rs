@@ -64,6 +64,7 @@ use std::path::{
 ///
 /// ```rust
 /// use ibex_parser::discover;
+/// use std::path::Path;
 ///
 /// let path = Path::new("./");
 /// let files = discover(path, None, None);
