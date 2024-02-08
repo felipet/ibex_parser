@@ -8,13 +8,13 @@ fn main() {
     let dir = "./tests/data";
     let path = Path::new(dir);
     let files = discover(path, None, None);
-    let mut parser = IbexParser::new();
+    let parser = IbexParser::new();
     let mut data: Vec<String>;
 
     for file in files {
         println!("Parsing file: {:?}", file);
         let filepath = format!("{}/{}",dir,file.as_str());
-        data = parser.parse_file(Path::new(&filepath));
+        data = parser.parse_file(Path::new(&filepath)).unwrap();
 
         for line in data {
             println!("{:?}", line);

@@ -3,6 +3,11 @@
 use std::path::Path;
 use std::fs::read_to_string;
 
+/// How many stock prices are included in a raw text file.
+const N_STOCKS_IN_RAW_FILE: usize = 36;
+/// How many lines has a common raw text data file.
+const N_LINES_PER_RAW_FILE: usize = 51;
+
 /// An object providing a parser for the Ibex index and its associated stocks.
 ///
 /// # Description
@@ -31,7 +36,7 @@ use std::fs::read_to_string;
 /// fn main() {
 ///     let path = Path::new("./tests/data/data_ibex.csv");
 ///     let mut parser = IbexParser::new();
-///     let mut data = parser.parse_file(path);
+///     let mut data = parser.parse_file(path).unwrap();
 ///
 ///     for line in data {
 ///         println!("{:?}", line);
@@ -154,52 +159,57 @@ impl IbexParser {
     ///
     /// ## Returns
     ///
-    /// A vector in which each position contains a `String` with the values for a stock.
-    /// An example of one entry:
+    /// A wrapped vector in which each position contains a `String` with the values for a
+    /// stock. An example of one entry:
     /// ```text
     /// "B.SANTANDER 06/02/2024 15:19:51 3,7420 12.825.738 47.876,71"
     /// ```
+    ///
+    /// If valid data could not be parsed, `None` is returned.
     ///
     /// That line could be modified using `with_custom_values`, see its documentation to
     /// get more details.
     ///
     /// [ibex35_data]: https://www.bolsasymercados.es/bme-exchange/es/Mercados-y-Cotizaciones/Acciones/Mercado-Continuo/Precios/ibex-35-ES0SI0000005
-    pub fn parse_file(&mut self, path: &Path) -> Vec<String> {
+    pub fn parse_file(&self, path: &Path) -> Option<Vec<String>> {
         let raw_data = read_to_string(path).expect("Couldn't read lines from the file");
         let mut counter: usize = 0;
         let lines: Vec<&str> = raw_data.lines().collect();
         let end = lines.len() - self.skip_n_lines_end;
-        let mut data: Vec<String> = Vec::with_capacity(35);
+        let mut data: Vec<String> = Vec::with_capacity(N_STOCKS_IN_RAW_FILE);
         let mut ref_cols_to_keep = &self.cols_to_keep_main;
 
-        for line in lines {
-            if counter == self.ibex_line {
-                counter += 1;
-            } else if counter < self.skip_n_lines_beg {
-                counter += 1;
-                continue;
-            } else if counter < end {
-                counter += 1;
-                ref_cols_to_keep = &self.cols_to_keep_stock;
-            } else {
-                break;
+        if lines.len() < N_LINES_PER_RAW_FILE {
+            None
+        } else {
+
+            for line in lines {
+                if counter == self.ibex_line {
+                    counter += 1;
+                } else if counter < self.skip_n_lines_beg {
+                    counter += 1;
+                    continue;
+                } else if counter < end {
+                    counter += 1;
+                    ref_cols_to_keep = &self.cols_to_keep_stock;
+                } else {
+                    break;
+                }
+
+                let raw_row: Vec<&str> = line.split("\t").collect();
+                let mut row: String = String::from("");
+
+                for col in ref_cols_to_keep.iter() {
+                    row.push_str(raw_row[*col]);
+                    row.push(';');
+                }
+
+                // Remove the last empty space.
+                row.pop();
+                data.push(row);
             }
 
-            let raw_row: Vec<&str> = line.split("\t").collect();
-            let mut row: String = String::from("");
-
-            for col in ref_cols_to_keep.iter() {
-                row.push_str(raw_row[*col]);
-                row.push(' ');
-            }
-
-            // Remove the last empty space.
-            row.pop();
-            data.push(row);
-            counter += 1;
-
-        }
-
-        data
+            Some(data)
+    }
     }
 }
