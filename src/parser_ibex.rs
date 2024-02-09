@@ -210,7 +210,7 @@ impl IbexParser {
             }
 
             Some(data)
-    }
+        }
     }
 }
 
