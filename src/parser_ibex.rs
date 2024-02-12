@@ -49,6 +49,7 @@ type StockData = Vec<String>;
 ///     }
 /// }
 /// ```
+/// [ibex35_data]: https://www.bolsasymercados.es/bme-exchange/es/Mercados-y-Cotizaciones/Acciones/Mercado-Continuo/Precios/ibex-35-ES0SI0000005
 pub struct IbexParser {
     skip_n_lines_beg: usize,
     ibex_line: usize,
@@ -218,13 +219,74 @@ impl IbexParser {
             Some(data)
         }
     }
+
+    /// Parse and filter a text file that contains stock prices.
+    ///
+    /// # Description
+    ///
+    /// This method performs a parsing of a text data file in the same way as `parse_file`
+    /// does, but it also filters out stock entries that are not included in the argument
+    /// `filter`. When using an empty filter, calling this method yields the same result
+    /// as calling `parse_file`.
+    ///
+    /// ## Arguments
+    ///
+    /// - An instance of a `Path` struct that points to a file that contains a raw text
+    ///   file with the structure alike to one the found in [here][ibex35_data].
+    /// - A `StockFilter` instance that includes none or some strings that will be used
+    ///   to filter what stock's data is the user interested about.
+    ///
+    /// ### Preconditions
+    ///
+    /// The file pointed by `path` must exist and the owner of the process running this
+    /// code must have permissions to read such file.
+    ///
+    /// ## Returns
+    ///
+    /// A wrapped vector in which each position contains a `String` with the values for a
+    /// stock. An example of one entry:
+    /// ```text
+    /// "B.SANTANDER 06/02/2024 15:19:51 3,7420 12.825.738 47.876,71"
+    /// ```
+    ///
+    /// If valid data could not be parsed, `None` is returned.
+    ///
+    /// That line could be modified using `with_custom_values`, see its documentation to
+    /// get more details.
+    ///
+    /// [ibex35_data]: https://www.bolsasymercados.es/bme-exchange/es/Mercados-y-Cotizaciones/Acciones/Mercado-Continuo/Precios/ibex-35-ES0SI0000005
+    pub fn filter_file(&self, path: &Path, filter: &StockFilter) -> Option<StockData> {
+        let raw_data = self.parse_file(path);
+
+        if raw_data == None {
+            return None;
+        }
+
+        // Allow using this method as a regular `parse_file` when no filters are given.
+        if filter.len() == 0 {
+            return raw_data;
+        }
+
+        let mut data: StockData = Vec::new();
+
+        for item in raw_data.unwrap().iter() {
+            for f in filter {
+                if item.contains(f) {
+                    data.push(item.clone());
+                    break;
+                }
+            }
+        }
+
+        Some(data)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use rstest::*;
-    use pretty_assertions::{assert_eq, assert_ne};
+    use pretty_assertions::assert_eq;
     use std::path::Path;
 
     #[fixture]
@@ -298,6 +360,36 @@ mod tests {
             // Only 2 columns where selected at instantiation.
             assert_eq!(entry.len(), 2);
         }
+    }
+
+    #[rstest]
+    fn test_ibexparser_filter_file(valid_data: Box<&'static Path>) {
+        let parser = IbexParser::new();
+        let path = *valid_data;
+        let mut filter: StockData = vec!["AENA".to_string()];
+
+        let mut parsed_data = parser.filter_file(path, &filter);
+        assert_eq!(parsed_data.unwrap().len(), filter.len());
+
+        filter.push(String::from("ACS"));
+        parsed_data = parser.filter_file(path, &filter);
+        assert_eq!(parsed_data.unwrap().len(), filter.len());
+
+        // Drop the previous filter and use and empty filter to check that calling
+        // `filter_file` with an empty filter yields the same result as `parse_file`.
+        filter = Vec::new();
+        parsed_data = parser.filter_file(path, &filter);
+        assert_eq!(parsed_data.unwrap().len(), N_STOCKS_IN_RAW_FILE-filter.len());
+    }
+
+    #[rstest]
+    fn test_ibexparser_filter_wrongfile(wrong_data: Box<&'static Path>) {
+        let parser = IbexParser::new();
+        let path = *wrong_data;
+        let filter: StockData = vec!["AENA".to_string()];
+
+        let parsed_data = parser.filter_file(path, &filter);
+        assert_eq!(parsed_data, None);
     }
 
 }
