@@ -8,6 +8,12 @@ const N_STOCKS_IN_RAW_FILE: usize = 36;
 /// How many lines has a common raw text data file.
 const N_LINES_PER_RAW_FILE: usize = 51;
 
+/// A custom type that identifies an array of strings that will be used to filter results.
+type StockFilter = Vec<String>;
+
+/// A custom type that identifies an array that includes stock data.
+type StockData = Vec<String>;
+
 /// An object providing a parser for the Ibex index and its associated stocks.
 ///
 /// # Description
@@ -171,7 +177,7 @@ impl IbexParser {
     /// get more details.
     ///
     /// [ibex35_data]: https://www.bolsasymercados.es/bme-exchange/es/Mercados-y-Cotizaciones/Acciones/Mercado-Continuo/Precios/ibex-35-ES0SI0000005
-    pub fn parse_file(&self, path: &Path) -> Option<Vec<String>> {
+    pub fn parse_file(&self, path: &Path) -> Option<StockData> {
         let raw_data = read_to_string(path).expect("Couldn't read lines from the file");
         let mut counter: usize = 0;
         let lines: Vec<&str> = raw_data.lines().collect();
