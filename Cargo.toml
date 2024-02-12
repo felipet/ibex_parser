@@ -12,3 +12,4 @@ categories = ["finance"]
 [dependencies]
 rstest = "0.18.2"
 pretty_assertions = "1.*"
+clap = { version = "4.5.0", features = ["derive"] }
