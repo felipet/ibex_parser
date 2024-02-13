@@ -1,6 +1,7 @@
 # Ibex 35 Rust Parser
 
 ![GitHub License](https://img.shields.io/github/license/felipet/ibex_parser)
+![GitHub Release](https://img.shields.io/github/v/release/felipet/ibex_parser)
 ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/felipet/ibex_parser/rust.yml?branch=main&style=flat&label=CI%20status&link=https%3A%2F%2Fgithub.com%2Ffelipet%2Fibex_parser%2Factions%2Fworkflows%2Frust.yml)
 
 A simple parsing tool that extracts stock information from raw text files.
