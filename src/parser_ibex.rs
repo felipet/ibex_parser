@@ -1,7 +1,7 @@
 // Copyright 2024 Felipe Torres González
 
-use std::path::Path;
 use std::fs::read_to_string;
+use std::path::Path;
 
 /// How many stock prices are included in a raw text file.
 const N_STOCKS_IN_RAW_FILE: usize = 36;
@@ -77,8 +77,8 @@ impl IbexParser {
             skip_n_lines_beg: 11,
             ibex_line: 6,
             skip_n_lines_end: 5,
-            cols_to_keep_main: vec![0,5,6,1],
-            cols_to_keep_stock: vec![0,7,8,1,5,6],
+            cols_to_keep_main: vec![0, 5, 6, 1],
+            cols_to_keep_stock: vec![0, 7, 8, 1, 5, 6],
         }
     }
 
@@ -121,7 +121,7 @@ impl IbexParser {
         idxl: usize,
         endl: usize,
         colsidx: Vec<usize>,
-        colsstock: Vec<usize>
+        colsstock: Vec<usize>,
     ) -> IbexParser {
         IbexParser {
             skip_n_lines_beg: inil,
@@ -189,7 +189,6 @@ impl IbexParser {
         if lines.len() < N_LINES_PER_RAW_FILE {
             None
         } else {
-
             for line in lines {
                 if counter == self.ibex_line {
                     counter += 1;
@@ -285,8 +284,8 @@ impl IbexParser {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rstest::*;
     use pretty_assertions::assert_eq;
+    use rstest::*;
     use std::path::Path;
 
     #[fixture]
@@ -347,10 +346,7 @@ mod tests {
 
     #[rstest]
     fn test_ibexparser_parse_customfile(valid_data: Box<&'static Path>) {
-        let parser = IbexParser::with_custom_values(
-            11, 6, 5,
-            vec![0,1], vec![0,1]
-        );
+        let parser = IbexParser::with_custom_values(11, 6, 5, vec![0, 1], vec![0, 1]);
         let path = *valid_data;
 
         let parsed_data = parser.parse_file(path).unwrap();
@@ -379,7 +375,10 @@ mod tests {
         // `filter_file` with an empty filter yields the same result as `parse_file`.
         filter = Vec::new();
         parsed_data = parser.filter_file(path, &filter);
-        assert_eq!(parsed_data.unwrap().len(), N_STOCKS_IN_RAW_FILE-filter.len());
+        assert_eq!(
+            parsed_data.unwrap().len(),
+            N_STOCKS_IN_RAW_FILE - filter.len()
+        );
     }
 
     #[rstest]
@@ -391,5 +390,4 @@ mod tests {
         let parsed_data = parser.filter_file(path, &filter);
         assert_eq!(parsed_data, None);
     }
-
 }
