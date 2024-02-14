@@ -53,7 +53,7 @@ The chosen output CSV format aims to ease the import of the data by 3rd party so
 
 # Why This Tool
 
-Most of the stock data providers offer derived data rather than the official values from the stock market. For example, if we aim to analyse the trend for **AENA**, we usually get data from the CFDs rather than from the regular stock market. This data coming from CFDs sometimes don't fully match the official data provided by the exchange. I've found this issue to happen quite often with volumes, as the price difference between derived data and regular stock data is usually very small, volumes quite differ sometimes, and it is a struggle to define strategies using wrong volume data. Also, the granularity of the collected data only depends on you. It's difficult to find data sources that allow downloading stock data for the Spanish market with a time interval lower than 1 day. 
+Most of the stock data providers offer derived data rather than the official values from the stock market. For example, if we aim to analyse the trend for **AENA**, we usually get data from the CFDs rather than from the regular stock market. This data coming from CFDs sometimes don't fully match the official data provided by the exchange. I've found this issue to happen quite often with volumes, as the price difference between derived data and regular stock data is usually very small, volumes quite differ sometimes, and it is a struggle to define strategies using wrong volume data. Also, the granularity of the collected data only depends on you. It's difficult to find data sources that allow downloading stock data for the Spanish market with a time interval lower than 1 day.
 
 The tool is designed to parse the official stock data coming from  [BME's](https://www.bolsasymercados.es/bme-exchange/es/Mercados-y-Cotizaciones/Acciones/Mercado-Continuo/Precios/ibex-35-ES0SI0000005) web page. Though delayed, this page offers the most accurate stock data for all the components of the **Ibex 35** index. And for testing algorithms or custom indicators, I don't need real-time but accurate data.
 
@@ -71,3 +71,13 @@ Data collection could be automated using some piece of code that connects to the
 # Output File Format
 
 As of today, the output format is fixed. Each parsed entry is outputted to the console with CSV format, i.e. each value is separated from the next value using the character ";". Decimals are marked using "," and thousands with ".". Prices are in €. Theres no logic that performs an ordering of the input data, so the output is shown in the same order as it was parsed. This makes important naming the input files using indexes with the order that you expect them to be processed.
+
+# Development
+
+This repository follows these development rules/policies:
+- Use this commit hook: [pre-commit](https://gist.github.com/felipet/c1455d3eae316d0c077e8e2b7385e5fc) to check the content of a git commit before it's actually commit.
+- Rust source code shall be autoformatted using **[rustfmt](https://github.com/rust-lang/rustfmt)**. The previous rule checks this before you are allowed to commit source code.
+
+## Maintainers
+
+- Felipe Torres González(torresfelipex1@gmail.com)

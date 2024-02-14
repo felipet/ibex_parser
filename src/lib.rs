@@ -2,10 +2,7 @@
 
 pub mod parser_ibex;
 
-use std::path::{
-    Path,
-    PathBuf
-};
+use std::path::{Path, PathBuf};
 
 /// Discover files that contain raw data for the stock prices of the Ibex 35.
 ///
@@ -101,11 +98,12 @@ pub fn discover(path: &Path, filter: Option<&str>, format: Option<&str>) -> Vec<
                     "_"
                 };
 
-                if extension == file_format &&
-                   filter == cur_file.file_stem().unwrap().to_str().unwrap()[..filter.len()] {
-                    files.push(
-                        String::from(cur_file.file_name().unwrap().to_str().unwrap())
-                    );
+                if extension == file_format
+                    && filter == cur_file.file_stem().unwrap().to_str().unwrap()[..filter.len()]
+                {
+                    files.push(String::from(
+                        cur_file.file_name().unwrap().to_str().unwrap(),
+                    ));
                 } else {
                     continue;
                 }
