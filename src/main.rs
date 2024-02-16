@@ -27,10 +27,17 @@ struct Args {
     path: String,
     /// Company to filter the results.
     filter: Option<String>,
+    /// Name of the data files.
+    #[arg(long)]
+    file_stem: Option<String>,
+    /// Extension of the data files.
+    #[arg(long)]
+    file_ext: Option<String>,
 }
 
 fn main() {
     let args = Args::parse();
+    // Check whether the stock list should be filtered to show only one stock entry.
     let filter: Vec<String> = if let Some(filter) = args.filter.as_deref() {
         vec![String::from(filter)]
     } else {
@@ -38,7 +45,10 @@ fn main() {
     };
 
     let path = Path::new(&args.path);
-    let files = discover(path, None, None);
+    // Call discover to build a list of data files that can be parsed later.
+    let files = discover(path, args.file_stem.as_deref(), args.file_ext.as_deref());
+
+    // Instance the parser and attempt to parse all the discovered files.
     let parser = IbexParser::new();
 
     for file in files {
