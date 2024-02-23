@@ -33,6 +33,9 @@ struct Args {
     /// Extension of the data files.
     #[arg(long)]
     file_ext: Option<String>,
+    /// Target day for parsing data.
+    #[arg(long)]
+    target_date: Option<String>,
 }
 
 fn main() {
@@ -49,7 +52,9 @@ fn main() {
     let files = discover(path, args.file_stem.as_deref(), args.file_ext.as_deref());
 
     // Instance the parser and attempt to parse all the discovered files.
-    let parser = IbexParser::new();
+    let mut parser = IbexParser::new();
+    // Pass the wrapped target date.
+    parser.target_date(args.target_date.as_deref());
 
     for file in files {
         let file_string = format!("{}/{}", &args.path, file.as_str());
