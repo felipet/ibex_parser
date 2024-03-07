@@ -2,7 +2,10 @@
 
 pub mod parser_ibex;
 
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    time::SystemTime,
+};
 
 /// Discover files that contain raw data for the stock prices of the Ibex 35.
 ///
@@ -37,6 +40,8 @@ use std::path::{Path, PathBuf};
 ///
 /// A vector of strings is returned containing the entire file names of the files found that
 /// satisfy the given filters (filter and format).
+///
+/// _New feature_: The vector is ordered from oldest file to the newest.
 ///
 /// # Example of use
 ///
@@ -83,7 +88,7 @@ pub fn discover(path: &Path, filter: Option<&str>, format: Option<&str>) -> Vec<
         String::from("csv")
     };
 
-    let mut files: Vec<String> = Vec::new();
+    let mut unordered_files: Vec<(u64, String)> = Vec::new();
 
     for entry in path.read_dir().expect("Can't read the directory") {
         if let Ok(entry) = entry {
@@ -101,14 +106,28 @@ pub fn discover(path: &Path, filter: Option<&str>, format: Option<&str>) -> Vec<
                 if extension == file_format
                     && filter == cur_file.file_stem().unwrap().to_str().unwrap()[..filter.len()]
                 {
-                    files.push(String::from(
-                        cur_file.file_name().unwrap().to_str().unwrap(),
+                    // Extract the creation time of the current file.
+                    let file_ts = entry.metadata().unwrap().created().ok().unwrap();
+                    // Convert it to a friendlier format.
+                    let creation_ts = file_ts.duration_since(SystemTime::UNIX_EPOCH).ok().unwrap();
+
+                    unordered_files.push((
+                        creation_ts.as_secs(),
+                        String::from(cur_file.file_name().unwrap().to_str().unwrap()),
                     ));
                 } else {
                     continue;
                 }
             }
         }
+    }
+
+    // Finally, make an ordered list of the files using their timestamps.
+    let mut files: Vec<String> = Vec::with_capacity(unordered_files.len());
+    unordered_files.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+
+    for (_, item) in unordered_files {
+        files.push(item);
     }
 
     files
