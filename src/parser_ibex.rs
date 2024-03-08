@@ -1,7 +1,8 @@
 // Copyright 2024 Felipe Torres González
 
+use log::info;
 use std::fs::read_to_string;
-use std::path::Path;
+use std::{collections::HashMap, path::Path};
 
 /// How many stock prices are included in a raw text file.
 const N_STOCKS_IN_RAW_FILE: usize = 36;
@@ -13,6 +14,8 @@ const DATE_SEPARATOR: char = '/';
 const DATE_COLUMN_INDEX: usize = 5;
 /// CSV separator
 const CSV_SEPARATOR: char = ';';
+/// Column index of the time stamp for a stock price entry.
+const TS_COL_IDX: usize = 2;
 
 /// A custom type that identifies an array of strings that will be used to filter results.
 type StockFilter = Vec<String>;
@@ -64,6 +67,7 @@ pub struct IbexParser {
     cols_to_keep_stock: Vec<usize>,
     target_date: Option<String>,
     col_date: usize,
+    ts_table: HashMap<String, i32>,
 }
 
 impl IbexParser {
@@ -89,6 +93,7 @@ impl IbexParser {
             cols_to_keep_stock: vec![0, 7, 8, 1, 5, 6],
             target_date: None,
             col_date: DATE_COLUMN_INDEX,
+            ts_table: HashMap::new(),
         }
     }
 
@@ -142,6 +147,7 @@ impl IbexParser {
             cols_to_keep_stock: colsstock,
             target_date: date.map_or(None, |x| Some(String::from(x))),
             col_date: DATE_COLUMN_INDEX,
+            ts_table: HashMap::new(),
         }
     }
 
@@ -175,10 +181,24 @@ impl IbexParser {
             } else {
                 parsed_date.push(d);
             }
-            self.target_date = Some(String::from(parsed_date[0]));
+            info!("Target day set to {:?}", self.target_date);
+
+            self.target_date = Some(String::from(parsed_date[0]))
         }
+        info!("Target day set to {:?}", self.target_date);
 
         self.target_date.as_ref().map(|x| x.as_ref())
+    }
+
+    /// Internal function that builds a HashMap to keep track of the time stamps
+    /// of the stock entries.
+    fn init_ts_table(&mut self, filters: &StockFilter) {
+        // Only build this table when there are filters and the table was empty.
+        if filters.len() > 0 && self.ts_table.len() < 1 {
+            for f in filters {
+                self.ts_table.insert(f.clone(), -1);
+            }
+        }
     }
 
     /// Parse a text file that contains stock prices.
@@ -259,6 +279,7 @@ impl IbexParser {
         // Avoid a parsing attempt over junk files. This would only cause troubles, and we know a valid file
         // at a bare minimum need to contain info for 35 stocks + the index.
         if lines.len() < N_LINES_PER_RAW_FILE {
+            info!("The current file contains no valid data to be parsed.");
             None
         } else {
             for line in lines {
@@ -320,6 +341,12 @@ impl IbexParser {
     /// `filter`. When using an empty filter, calling this method yields the same result
     /// as calling `parse_file`.
     ///
+    /// _new feature_: This method checks whether the input file contains new data or not.
+    /// When a new file is parsed, if there is no reference from a previous file, its timestamp
+    /// is stored for later comparison. If this method is called over a new input file, its
+    /// timestamp is compared against the previous one, if there's no difference, the data from
+    /// the input file is discarded.
+    ///
     /// ## Arguments
     ///
     /// - An instance of a `Path` struct that points to a file that contains a raw text
@@ -346,7 +373,7 @@ impl IbexParser {
     /// get more details.
     ///
     /// [ibex35_data]: https://www.bolsasymercados.es/bme-exchange/es/Mercados-y-Cotizaciones/Acciones/Mercado-Continuo/Precios/ibex-35-ES0SI0000005
-    pub fn filter_file(&self, path: &Path, filter: &StockFilter) -> Option<StockData> {
+    pub fn filter_file(&mut self, path: &Path, filter: &StockFilter) -> Option<StockData> {
         let raw_data = self.parse_file(path);
 
         if raw_data == None {
@@ -360,10 +387,35 @@ impl IbexParser {
 
         let mut data: StockData = Vec::new();
 
+        // Keep a table with the timestamps for each entry of the filter. This way we can check whether
+        // any new value is really new or it's repeated compared to the previous parsed one.
+        self.init_ts_table(&filter);
+
         for item in raw_data.unwrap().iter() {
+            // Push the data only if it belongs to the filters (if any was given).
             for f in filter {
-                if item.contains(f) {
+                // Extract the fields for the current row.
+                let col_split = item.split(";").collect::<Vec<&str>>();
+                // Extract the time of the entry.
+                let mut str_ts = col_split[TS_COL_IDX].to_string();
+
+                // When "Cierre" is read, there won't be any more new entries until the next trading day.
+                if str_ts == "Cierre" {
+                    break;
+                }
+
+                // And make it planar so we can do simple maths with it.
+                str_ts.retain(|c| c != ':');
+
+                // Parse the time stamp for the current entry price, if it is more recent than the
+                // previous one, store it. Omit it otherwise. This way, if data files after the closing of
+                // the session are present, the values will be safely omitted.
+                let current_ts = str_ts.parse::<i32>().unwrap_or_default();
+
+                if item.contains(f) && *self.ts_table.get(&f[..]).unwrap() != current_ts {
                     data.push(item.clone());
+                    // Update the time stamp of the last pushed value.
+                    self.ts_table.insert(f[..].to_string(), current_ts);
                     break;
                 }
             }
@@ -381,8 +433,13 @@ mod tests {
     use std::path::Path;
 
     #[fixture]
-    fn valid_data() -> Box<&'static Path> {
+    fn valid_data_cierre() -> Box<&'static Path> {
         Box::new(Path::new("./tests/data/data_ibex.csv"))
+    }
+
+    #[fixture]
+    fn valid_data() -> Box<&'static Path> {
+        Box::new(Path::new("./tests/data/data_ibex(1).csv"))
     }
 
     #[fixture]
@@ -451,17 +508,19 @@ mod tests {
     }
 
     #[rstest]
-    fn test_ibexparser_filter_file(valid_data: Box<&'static Path>) {
-        let parser = IbexParser::new();
-        let path = *valid_data;
+    fn test_ibexparser_filter_file_cierre(valid_data_cierre: Box<&'static Path>) {
+        let mut parser = IbexParser::new();
+        let path = *valid_data_cierre;
         let mut filter: StockData = vec!["AENA".to_string()];
 
         let mut parsed_data = parser.filter_file(path, &filter);
-        assert_eq!(parsed_data.unwrap().len(), filter.len());
+        // The entry for AENA has a "Cierre" timestamp.
+        assert_eq!(parsed_data.unwrap().len(), 0);
 
         filter.push(String::from("ACS"));
         parsed_data = parser.filter_file(path, &filter);
-        assert_eq!(parsed_data.unwrap().len(), filter.len());
+        // The entry for ACS has a "Cierre" timestamp.
+        assert_eq!(parsed_data.unwrap().len(), 0);
 
         // Drop the previous filter and use and empty filter to check that calling
         // `filter_file` with an empty filter yields the same result as `parse_file`.
@@ -474,8 +533,18 @@ mod tests {
     }
 
     #[rstest]
+    fn test_ibexparser_filter_file(valid_data: Box<&'static Path>) {
+        let mut parser = IbexParser::new();
+        let path = *valid_data;
+        let filter: StockData = vec!["AENA".to_string(), "ACS".to_string()];
+
+        let parsed_data = parser.filter_file(path, &filter);
+        assert_eq!(parsed_data.unwrap().len(), filter.len());
+    }
+
+    #[rstest]
     fn test_ibexparser_filter_wrongfile(wrong_data: Box<&'static Path>) {
-        let parser = IbexParser::new();
+        let mut parser = IbexParser::new();
         let path = *wrong_data;
         let filter: StockData = vec!["AENA".to_string()];
 
