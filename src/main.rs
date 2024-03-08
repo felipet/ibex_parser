@@ -29,7 +29,7 @@ struct Args {
     /// Directory to search for text data files.
     path: String,
     /// Company to filter the results.
-    filter: Option<String>,
+    filter: Option<Vec<String>>,
     /// Name of the data files.
     #[arg(long)]
     file_stem: Option<String>,
