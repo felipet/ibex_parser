@@ -4,6 +4,9 @@ use clap::Parser;
 use ibex_parser::discover;
 use ibex_parser::parser_ibex::IbexParser;
 use std::path::Path;
+extern crate pretty_env_logger;
+#[macro_use]
+extern crate log;
 
 // The minium size of a text file that might contain stock data. Files with less than this size are omitted.
 const MIN_BYTES_X_FILE: u64 = 560;
@@ -39,22 +42,28 @@ struct Args {
 }
 
 fn main() {
+    pretty_env_logger::init();
     let args = Args::parse();
     // Check whether the stock list should be filtered to show only one stock entry.
-    let filter: Vec<String> = if let Some(filter) = args.filter.as_deref() {
-        vec![String::from(filter)]
-    } else {
-        Vec::new()
-    };
+    let mut filter: Vec<String> = Vec::new();
+
+    if let Some(x) = args.filter.as_deref() {
+        filter.extend_from_slice(x);
+    }
 
     let path = Path::new(&args.path);
     // Call discover to build a list of data files that can be parsed later.
     let files = discover(path, args.file_stem.as_deref(), args.file_ext.as_deref());
+    debug!("List of files to be parsed:");
+    debug!("{:?}", files);
 
     // Instance the parser and attempt to parse all the discovered files.
     let mut parser = IbexParser::new();
     // Pass the wrapped target date.
     parser.target_date(args.target_date.as_deref());
+    if let Some(x) = parser.target_date(None) {
+        info!("Files that contain data for day {x} will be parsed.");
+    }
 
     for file in files {
         let file_string = format!("{}/{}", &args.path, file.as_str());
@@ -64,6 +73,7 @@ fn main() {
         if path.metadata().unwrap().len() < MIN_BYTES_X_FILE {
             continue;
         }
+        debug!("Parsing {file_string} using filters: {:?}", filter);
         let data = parser.filter_file(path, &filter);
 
         match data {
@@ -72,7 +82,7 @@ fn main() {
                     println!("{}", line);
                 }
             }
-            None => println!("File {file} doesn't contain valid data."),
+            None => warn!("File {file} doesn't contain valid data."),
         }
     }
 }
