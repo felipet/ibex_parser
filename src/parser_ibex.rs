@@ -97,60 +97,6 @@ impl IbexParser {
         }
     }
 
-    /// Parameterized constructor for IbexParser.
-    ///
-    /// # Description
-    ///
-    /// This constructor allows parsing a slightly different text file. In brief, the key
-    /// important rows are the ones containing stock prices. The rest are simply ignored.
-    /// There's one exception, the 6th line, which contains data for the index. If the
-    /// raw text data is collected in a different way, just modify how many lines should
-    /// be ignored at the file's header and bottom. If there's no special line for the
-    /// index, just assign it to the first line containing useful data.
-    ///
-    /// It doesn't matter whether there 35 stock rows, or 2, if the bounds of the file are
-    /// properly set, and the information is structured in columns split by the character `\t`.
-    ///
-    /// ## Arguments
-    ///
-    /// - `inil` indicates the number of header lines that shall be ignored by the parser.
-    /// - `idxl` indicates the line index in which the information for the index is found. Usually
-    ///   this line is found inside the initial header, so the parser will ignore `inil` lines but
-    ///   the one pointed by this argument.
-    /// - `endl` indicates the number of bottom lines that shall be ignored by the parser.
-    /// - `colsidx` shall include the column indexes that shall be parsed for the special line.
-    ///   See the [examples][#Examples] of use to get more details.
-    /// - `colsstock` shall include the column indexes that shall be parsed for the regular stocks.
-    ///   See the [examples][#Examples] of use to get more details.
-    ///
-    /// # Examples of use
-    ///
-    /// For example if we need only the stock price and its last price, we can skip the rest of
-    /// columns from the parsing this way:
-    ///
-    /// ```rust,ignore
-    /// let parser = IbexParser::with_custom_values(11, 6, 5, vec![0,1], vec![0,1]);
-    /// ```
-    pub fn with_custom_values(
-        inil: usize,
-        idxl: usize,
-        endl: usize,
-        colsidx: Vec<usize>,
-        colsstock: Vec<usize>,
-        date: Option<&str>,
-    ) -> IbexParser {
-        IbexParser {
-            skip_n_lines_beg: inil,
-            ibex_line: idxl,
-            skip_n_lines_end: endl,
-            cols_to_keep_main: colsidx,
-            cols_to_keep_stock: colsstock,
-            target_date: date.map_or(None, |x| Some(String::from(x))),
-            col_date: DATE_COLUMN_INDEX,
-            ts_table: HashMap::new(),
-        }
-    }
-
     /// Set a target date to filter out entries with a different date.
     ///
     /// # Description
@@ -190,7 +136,7 @@ impl IbexParser {
         self.target_date.as_ref().map(|x| x.as_ref())
     }
 
-    /// Internal function that builds a HashMap to keep track of the time stamps
+    /// Internal method that builds a HashMap to keep track of the time stamps
     /// of the stock entries.
     fn init_ts_table(&mut self, filters: &StockFilter) {
         // Only build this table when there are filters and the table was empty.
@@ -201,53 +147,25 @@ impl IbexParser {
         }
     }
 
-    /// Parse a text file that contains stock prices.
+    /// Internal method that parses the content of a raw text file.
     ///
     /// # Description
     ///
-    /// This method reads a text file by lines and parses the information to extract
-    /// stock prices and other information. The structure of the text file is alike
-    /// to the table found [here][ibex35_data].
-    ///
-    /// Briefly, there is a line at line 7 that contains the information for the index.
-    /// Then, at line 11, there are 35 lines in which each line includes the information
-    /// for a stock of the index.
-    ///
-    /// Some values are discarded as I find them of little relevance. The following
-    /// values are parsed:
-    /// - Stock name at column 0.
-    /// - Timestamp of the values at columns 7 (date) and 8 (time).
-    /// - Last negotiated price at column 1.
-    /// - Accumulated volume at column 5.
-    /// - Accumulated volume in thousands of Euro at column 6.
-    ///
-    /// **The values are returned in that order** for each stock entry.
+    /// This method reads the input text file and parses stock price entries row by row.
+    /// It supports using target dates to skip data that it's not interesting. There
+    /// are no more filtering features applied by this method. More advanced filters can
+    /// be applied by the following stages of the parsing chain.
     ///
     /// ## Arguments
     ///
     /// An instance of a `Path` struct that points to a file that contains a raw text
     /// file with the structure alike to one the found in [here][ibex35_data].
     ///
-    /// ### Preconditions
-    ///
-    /// The file pointed by `path` must exist and the owner of the process running this
-    /// code must have permissions to read such file.
-    ///
     /// ## Returns
     ///
-    /// A wrapped vector in which each position contains a `String` with the values for a
-    /// stock. An example of one entry:
-    /// ```text
-    /// "B.SANTANDER 06/02/2024 15:19:51 3,7420 12.825.738 47.876,71"
-    /// ```
-    ///
-    /// If valid data could not be parsed, `None` is returned.
-    ///
-    /// That line could be modified using `with_custom_values`, see its documentation to
-    /// get more details.
-    ///
-    /// [ibex35_data]: https://www.bolsasymercados.es/bme-exchange/es/Mercados-y-Cotizaciones/Acciones/Mercado-Continuo/Precios/ibex-35-ES0SI0000005
-    pub fn parse_file(&self, path: &Path) -> Option<StockData> {
+    /// A `StockData` type that contains the parsed data. Each row is pushed to a single
+    /// position of the `StockData` collection.
+    fn load_data_file(&self, path: &Path) -> Option<StockData> {
         let raw_data = read_to_string(path).expect("Couldn't read lines from the file");
         // Line counter.
         let mut counter: usize = 0;
@@ -332,6 +250,131 @@ impl IbexParser {
         }
     }
 
+    /// Internal method that analyses a `StockData` collection to extract stock names.
+    ///
+    /// # Description
+    ///
+    /// This method is used to build a map that keeps track of the time stamp entries
+    /// for each stock for the input data files.
+    /// Rather than writing by hand the names of the 35 stocks + the Index name, this
+    /// method extracts those from the input data. This way, the code will be valid
+    /// when any stock leaves the index and another one is included in it.
+    ///
+    /// ## Arguments
+    ///
+    /// A `StockData` collection as reference that results after parsing a input
+    /// data file.
+    ///
+    /// ## Preconditions
+    ///
+    /// - The input argument `stock_vec` must contain stock values, i.e. `stock_vec.len() > 0`.
+    /// - The stocks included in the input data files must be always present for all the input
+    ///   files that are fed to the parser at once.
+    fn extract_stocks(&self, stock_vec: &StockData) -> StockData {
+        let mut filters = Vec::new();
+
+        for item in stock_vec {
+            let values: StockData = item.split(";").map(|e| e.to_string()).collect();
+            filters.push(values[0].clone());
+        }
+
+        filters
+    }
+
+    /// Parse a text file that contains stock prices.
+    ///
+    /// # Description
+    ///
+    /// This method reads a text file by lines and parses the information to extract
+    /// stock prices and other information. The structure of the text file is alike
+    /// to the table found [here][ibex35_data].
+    ///
+    /// Briefly, there is a line at line 7 that contains the information for the index.
+    /// Then, at line 11, there are 35 lines in which each line includes the information
+    /// for a stock of the index.
+    ///
+    /// Some values are discarded as I find them of little relevance. The following
+    /// values are parsed:
+    /// - Stock name at column 0.
+    /// - Timestamp of the values at columns 7 (date) and 8 (time).
+    /// - Last negotiated price at column 1.
+    /// - Accumulated volume at column 5.
+    /// - Accumulated volume in thousands of Euro at column 6.
+    ///
+    /// **The values are returned in that order** for each stock entry.
+    ///
+    /// The parser analyses the time stamp for each stock price entry. If an entry contains
+    /// a time stamp older in time than the previous parsed, the entry is skipped. Also, when
+    /// "Cierre" is parsed from the time stamp column, the parsing is stopped because it that
+    /// value means no more stock price entries with valid data will be read until a new
+    /// trading day.
+    ///
+    /// ## Arguments
+    ///
+    /// An instance of a `Path` struct that points to a file that contains a raw text
+    /// file with the structure alike to one the found in [here][ibex35_data].
+    ///
+    /// ### Preconditions
+    ///
+    /// The file pointed by `path` must exist and the owner of the process running this
+    /// code must have permissions to read such file.
+    ///
+    /// ## Returns
+    ///
+    /// A wrapped vector in which each position contains a `String` with the values for a
+    /// stock. An example of one entry:
+    /// ```text
+    /// "B.SANTANDER 06/02/2024 15:19:51 3,7420 12.825.738 47.876,71"
+    /// ```
+    ///
+    /// If valid data could not be parsed, `None` is returned.
+    ///
+    /// That line could be modified using `with_custom_values`, see its documentation to
+    /// get more details.
+    ///
+    /// [ibex35_data]: https://www.bolsasymercados.es/bme-exchange/es/Mercados-y-Cotizaciones/Acciones/Mercado-Continuo/Precios/ibex-35-ES0SI0000005
+    pub fn parse_file(&mut self, path: &Path) -> Option<StockData> {
+        // If None is received, return it to the caller.
+        let raw_data = self.load_data_file(path)?;
+        let mut data = Vec::new();
+        // This method receives no filters, thus the time stamp map shall contain all the
+        // stocks as filters.
+        let filter = self.extract_stocks(&raw_data);
+        // Now, build the time stamp map for all the stocks.
+        self.init_ts_table(&filter);
+
+        for item in raw_data.iter() {
+            let col_split = item.split(";").collect::<Vec<&str>>();
+            // Extract the time of the entry.
+            let mut str_ts = col_split[TS_COL_IDX].to_string();
+            let stock = col_split[0];
+
+            // When "Cierre" is read, there won't be any more new entries until the
+            // next trading day for this stock, using an impossible time stamp to
+            // signal such scenario.
+            if str_ts == "Cierre" {
+                self.ts_table.insert(stock.to_string(), <i32>::default());
+                continue;
+            }
+
+            // And make it planar so we can do simple maths with it.
+            str_ts.retain(|c| c != ':');
+
+            // Parse the time stamp for the current entry price, if it is more recent than the
+            // previous one, store it. Omit it otherwise. This way, if data files after the closing of
+            // the session are present, the values will be safely omitted.
+            let current_ts = str_ts.parse::<i32>().unwrap_or_default();
+
+            if *self.ts_table.get(stock).unwrap() != current_ts {
+                data.push(item.clone());
+                self.ts_table.insert(stock.to_string(), current_ts);
+                continue;
+            }
+        }
+
+        Some(data)
+    }
+
     /// Parse and filter a text file that contains stock prices.
     ///
     /// # Description
@@ -340,12 +383,6 @@ impl IbexParser {
     /// does, but it also filters out stock entries that are not included in the argument
     /// `filter`. When using an empty filter, calling this method yields the same result
     /// as calling `parse_file`.
-    ///
-    /// _new feature_: This method checks whether the input file contains new data or not.
-    /// When a new file is parsed, if there is no reference from a previous file, its timestamp
-    /// is stored for later comparison. If this method is called over a new input file, its
-    /// timestamp is compared against the previous one, if there's no difference, the data from
-    /// the input file is discarded.
     ///
     /// ## Arguments
     ///
@@ -387,35 +424,12 @@ impl IbexParser {
 
         let mut data: StockData = Vec::new();
 
-        // Keep a table with the timestamps for each entry of the filter. This way we can check whether
-        // any new value is really new or it's repeated compared to the previous parsed one.
-        self.init_ts_table(&filter);
-
         for item in raw_data.unwrap().iter() {
             // Push the data only if it belongs to the filters (if any was given).
             for f in filter {
-                // Extract the fields for the current row.
-                let col_split = item.split(";").collect::<Vec<&str>>();
-                // Extract the time of the entry.
-                let mut str_ts = col_split[TS_COL_IDX].to_string();
-
-                // When "Cierre" is read, there won't be any more new entries until the next trading day.
-                if str_ts == "Cierre" {
-                    break;
-                }
-
-                // And make it planar so we can do simple maths with it.
-                str_ts.retain(|c| c != ':');
-
-                // Parse the time stamp for the current entry price, if it is more recent than the
-                // previous one, store it. Omit it otherwise. This way, if data files after the closing of
-                // the session are present, the values will be safely omitted.
-                let current_ts = str_ts.parse::<i32>().unwrap_or_default();
-
-                if item.contains(f) && *self.ts_table.get(&f[..]).unwrap() != current_ts {
+                if item.contains(f) {
                     data.push(item.clone());
                     // Update the time stamp of the last pushed value.
-                    self.ts_table.insert(f[..].to_string(), current_ts);
                     break;
                 }
             }
@@ -455,7 +469,7 @@ mod tests {
     // Check that we can parse a file with data.
     #[rstest]
     fn test_ibexparser_parse_file(valid_data: Box<&'static Path>) {
-        let parser = IbexParser::new();
+        let mut parser = IbexParser::new();
         let path = *valid_data;
 
         let parsed_data = parser.parse_file(path).unwrap();
@@ -478,7 +492,7 @@ mod tests {
     #[rstest]
     #[should_panic]
     fn test_ibexparser_parse_nofile(non_existing_data: Box<&'static Path>) {
-        let parser = IbexParser::new();
+        let mut parser = IbexParser::new();
         let path = *non_existing_data;
 
         let _parsed_data = parser.parse_file(path).unwrap();
@@ -486,25 +500,11 @@ mod tests {
 
     #[rstest]
     fn test_ibexparser_parse_wrongfile(wrong_data: Box<&'static Path>) {
-        let parser = IbexParser::new();
+        let mut parser = IbexParser::new();
         let path = *wrong_data;
 
         let parsed_data = parser.parse_file(path);
         assert_eq!(parsed_data, None);
-    }
-
-    #[rstest]
-    fn test_ibexparser_parse_customfile(valid_data: Box<&'static Path>) {
-        let parser = IbexParser::with_custom_values(11, 6, 5, vec![0, 1], vec![0, 1], None);
-        let path = *valid_data;
-
-        let parsed_data = parser.parse_file(path).unwrap();
-        assert_eq!(parsed_data.len(), N_STOCKS_IN_RAW_FILE);
-        for item in parsed_data.iter() {
-            let entry: Vec<&str> = item.split(";").collect();
-            // Only 2 columns where selected at instantiation.
-            assert_eq!(entry.len(), 2);
-        }
     }
 
     #[rstest]
@@ -526,10 +526,7 @@ mod tests {
         // `filter_file` with an empty filter yields the same result as `parse_file`.
         filter = Vec::new();
         parsed_data = parser.filter_file(path, &filter);
-        assert_eq!(
-            parsed_data.unwrap().len(),
-            N_STOCKS_IN_RAW_FILE - filter.len()
-        );
+        assert_eq!(parsed_data.unwrap().len(), 0);
     }
 
     #[rstest]
@@ -561,5 +558,15 @@ mod tests {
         assert_eq!(parser.target_date(None), None);
         assert_eq!(parser.target_date(Some(set_date)).unwrap(), set_date);
         assert_eq!(parser.target_date(Some(set_full_date)).unwrap(), set_date);
+    }
+
+    #[rstest]
+    fn test1_ibexparser_extract_stocks(valid_data: Box<&'static Path>) {
+        let parser = IbexParser::new();
+        let path = *valid_data;
+        let raw_data = parser.load_data_file(path).unwrap();
+
+        let parsed_data = parser.extract_stocks(&raw_data);
+        assert_eq!(parsed_data.len(), N_STOCKS_IN_RAW_FILE);
     }
 }
